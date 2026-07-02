@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+html { scroll-behavior: smooth; }
+body { background: #f8fafc; color: #0f172a; }
+::selection { background: #fed7aa; }
+.prose-guide h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: .5rem; }
+.prose-guide p { color: #475569; line-height: 1.7; }
