@@ -1,12 +1,6 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { hasSupabaseEnv } from './supabase'
-
-type CookieToSet = {
-  name: string
-  value: string
-  options: CookieOptions
-}
 
 export async function createSupabaseServerClient() {
   if (!hasSupabaseEnv()) return null
@@ -17,7 +11,13 @@ export async function createSupabaseServerClient() {
       getAll() {
         return cookieStore.getAll()
       },
-      setAll(cookiesToSet: CookieToSet[]) {
+      setAll(
+        cookiesToSet: Array<{
+          name: string
+          value: string
+          options?: Parameters<typeof cookieStore.set>[2]
+        }>
+      ) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
         } catch {
