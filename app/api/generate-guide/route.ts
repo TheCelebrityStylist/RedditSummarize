@@ -8,6 +8,8 @@ import { createSupabaseAdminClient } from '@/lib/supabase'
 
 const bodySchema = z.object({ redditUrl: redditUrlSchema })
 
+type HttpError = Error & { status?: number; code?: string }
+
 export async function POST(request: NextRequest) {
   let redditUrl = ''
   try {
@@ -40,12 +42,27 @@ export async function POST(request: NextRequest) {
 
     await recordGeneration({ userId: user?.id, guestId, guideId: id, redditUrl, status: 'complete' })
     const response = NextResponse.json({ id, guide })
-    response.cookies.set('threadguide_guest_id', guestId, { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 })
+    response.cookies.set('threadguide_guest_id', guestId, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 365 })
     return response
   } catch (error) {
+    const typedError = error as HttpError
     await recordGeneration({ redditUrl, status: 'failed', error: error instanceof Error ? error.message : 'Unknown error' })
-    if (error instanceof z.ZodError) return NextResponse.json({ error: 'Invalid Reddit URL.' }, { status: 400 })
-    const status = error instanceof Error && error.name === 'UsageLimitError' ? 402 : 500
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not generate guide.' }, { status })
+
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({
+        error: 'Enter a valid public Reddit thread URL.',
+        code: 'INVALID_URL'
+      }, { status: 400 })
+    }
+
+    if (error instanceof Error && error.name === 'UsageLimitError') {
+      return NextResponse.json({ error: error.message, code: 'USAGE_LIMIT' }, { status: 402 })
+    }
+
+    const status = typeof typedError.status === 'number' ? typedError.status : 500
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'Could not generate guide.',
+      code: typedError.code || 'GENERATION_FAILED'
+    }, { status })
   }
 }
