@@ -8,7 +8,9 @@ export const landingPages={
 'reddit-pc-build-summarizer':['Reddit PC Build Summarizer','Organize component advice, compatibility risks, value trade-offs, and upgrade priorities.'],
 'reddit-skincare-thread-analyzer':['Reddit Skincare Thread Analyzer','Turn routine debates into ordered steps, ingredient caveats, patch-testing guidance, and uncertainty.'],
 'reddit-personal-finance-summarizer':['Reddit Personal Finance Summarizer','Find the priority order, exceptions, risks, and disputed assumptions in financial discussions.'],
-'reddit-review-analyzer':['Reddit Review Analyzer','Distinguish repeated ownership patterns from isolated anecdotes and promotional noise.']
+'reddit-review-analyzer':['Reddit Review Analyzer','Distinguish repeated ownership patterns from isolated anecdotes and promotional noise.'],
+'reddit-fitness-thread-summarizer':['Reddit Fitness Thread Summarizer','Extract program structure, progression, recovery, nutrition, and injury warnings from fitness discussions.'],
+'reddit-onebag-thread-summarizer':['Reddit One-Bag Thread Summarizer','Turn packing debates into a practical carry-on list, trade-offs, and destination-specific warnings.']
 }as const
 export const articles={
 'how-to-summarize-a-reddit-thread':'How to summarize a Reddit thread without losing the useful disagreement',
@@ -18,5 +20,9 @@ export const articles={
 'how-reddit-upvotes-affect-consensus':'How Reddit upvotes affect perceived consensus',
 'how-to-identify-expert-advice-on-reddit':'How to identify credible expertise on Reddit',
 'how-to-compare-multiple-reddit-threads':'How to compare multiple Reddit threads',
-'how-to-research-travel-on-reddit':'How to research travel on Reddit without overplanning'
+'how-to-research-travel-on-reddit':'How to research travel on Reddit without overplanning',
+'how-to-research-skincare-on-reddit':'How to research skincare on Reddit safely',
+'how-to-research-pc-builds-on-reddit':'How to research PC builds on Reddit',
+'how-to-spot-promotional-comments-on-reddit':'How to spot promotional comments on Reddit',
+'reddit-research-checklist':'The defensible Reddit research checklist'
 }as const

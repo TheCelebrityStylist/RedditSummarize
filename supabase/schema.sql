@@ -79,6 +79,17 @@ create table if not exists public.follow_up_conversations (
   created_at timestamptz default now()
 );
 
+create table if not exists public.public_guides (
+  id uuid primary key default gen_random_uuid(),
+  guide_id uuid unique references public.guides(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  slug text unique not null,
+  published boolean default true,
+  indexable boolean default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 alter table public.guides enable row level security;
 alter table public.generations enable row level security;
 alter table public.subscriptions enable row level security;
@@ -86,6 +97,7 @@ alter table public.saved_guides enable row level security;
 alter table public.webhook_events enable row level security;
 alter table public.guide_action_progress enable row level security;
 alter table public.follow_up_conversations enable row level security;
+alter table public.public_guides enable row level security;
 
 create index if not exists generations_user_created_idx on public.generations(user_id, created_at desc);
 create index if not exists generations_guest_created_idx on public.generations(guest_id, created_at desc);
@@ -101,6 +113,8 @@ create policy "Users can read own subscription" on public.subscriptions for sele
 create policy "Users can manage own saved guides" on public.saved_guides for all using (auth.uid() = user_id);
 create policy "Users can manage own action progress" on public.guide_action_progress for all using (auth.uid() = user_id);
 create policy "Users can read own follow ups" on public.follow_up_conversations for select using (auth.uid() = user_id);
+create policy "Anyone can read published guides" on public.public_guides for select using (published = true or auth.uid() = user_id);
+create policy "Users can manage own public guides" on public.public_guides for all using (auth.uid() = user_id);
 
 create or replace function public.set_updated_at()
 returns trigger as $$
