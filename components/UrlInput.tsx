@@ -1,64 +1,11 @@
 'use client'
-
 import { useState } from 'react'
-import { ArrowRight, Sparkles } from 'lucide-react'
+import { ArrowRight, Clipboard, LoaderCircle, RotateCcw, Sparkles, X } from 'lucide-react'
+import { redditUrlSchema } from '@/lib/validation'
 
-export function UrlInput({ compact = false }: { compact?: boolean }) {
-  const [url, setUrl] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function submit(inputUrl = url) {
-    setError('')
-    setLoading(true)
-    try {
-      const response = await fetch('/api/generate-guide', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ redditUrl: inputUrl })
-      })
-      const json = await response.json()
-      if (!response.ok) throw new Error(json.error || 'Could not generate guide')
-      window.location.href = `/guides/${json.id}`
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Something went wrong')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function demo() {
-    const demoUrl = 'https://www.reddit.com/r/solotravel/comments/demo/threadguide_demo/'
-    setUrl(demoUrl)
-    await submit(demoUrl)
-  }
-
-  return (
-    <div className="w-full">
-      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-white p-2 shadow-soft md:flex-row">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="Paste a Reddit thread URL..."
-          className="min-h-12 flex-1 rounded-xl px-4 text-base outline-none placeholder:text-slate-400"
-        />
-        <button
-          onClick={() => submit()}
-          disabled={loading}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-ink px-5 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? 'Generating...' : 'Generate guide'} <ArrowRight className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        {!compact && (
-          <button onClick={demo} className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-ink">
-            <Sparkles className="h-4 w-4" /> Try the demo thread
-          </button>
-        )}
-        {error && <p className="text-sm font-medium text-red-600">{error}</p>}
-      </div>
-    </div>
-  )
-}
+const stages=['Connecting to Reddit','Loading the original post','Reading and ranking comments','Grouping repeated advice','Detecting disagreements','Building your action plan']
+export function UrlInput({compact=false}:{compact?:boolean}){const[url,setUrl]=useState('');const[loading,setLoading]=useState(false);const[error,setError]=useState('');const[stage,setStage]=useState(0)
+async function submit(input=url){const parsed=redditUrlSchema.safeParse(input);if(!parsed.success){setError(parsed.error.issues[0]?.message||'Enter a valid Reddit thread URL.');return}setError('');setLoading(true);setStage(0);const timer=setInterval(()=>setStage(s=>Math.min(s+1,stages.length-1)),1100);try{const response=await fetch('/api/generate-guide',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({redditUrl:parsed.data})});const json=await response.json();if(!response.ok)throw new Error(json.error||'Could not generate guide');window.location.href=`/guides/${json.id}`}catch(e){setError(e instanceof Error?e.message:'Something went wrong')}finally{clearInterval(timer);setLoading(false)}}
+async function paste(){try{setUrl(await navigator.clipboard.readText());setError('')}catch{setError('Clipboard access was blocked. Paste the URL manually.')}}
+const demo=()=>submit('https://www.reddit.com/r/solotravel/comments/demo/threadguide_demo/')
+return <div className="w-full"><div className="command-bar flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_60px_rgba(15,23,42,.13)] focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-100"><span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 font-black text-brand sm:flex">r/</span><label className="sr-only" htmlFor="reddit-url">Reddit thread URL</label><input id="reddit-url" value={url} onChange={e=>{setUrl(e.target.value);setError('')}} onKeyDown={e=>e.key==='Enter'&&!loading&&submit()} placeholder="reddit.com/r/…/comments/…" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-slate-400 sm:text-base" disabled={loading}/>{url&&!loading&&<button aria-label="Clear URL" onClick={()=>setUrl('')} className="rounded-lg p-2 text-muted hover:bg-slate-100"><X className="h-4 w-4"/></button>}<button aria-label="Paste from clipboard" onClick={paste} disabled={loading} className="hidden rounded-lg p-2 text-muted hover:bg-slate-100 sm:block"><Clipboard className="h-4 w-4"/></button><button onClick={()=>submit()} disabled={loading} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-70 sm:px-5">{loading?<><LoaderCircle className="h-4 w-4 animate-spin"/><span className="hidden sm:inline">Analyzing</span></>:<><span className="hidden sm:inline">Generate guide</span><span className="sm:hidden">Go</span><ArrowRight className="h-4 w-4"/></>}</button></div>{loading&&<div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm" role="status"><div className="flex items-center justify-between text-sm"><span className="font-semibold">{stages[stage]}</span><span className="text-muted">Step {stage+1} of {stages.length}</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand transition-all duration-700" style={{width:`${((stage+1)/stages.length)*100}%`}}/></div></div>}{error&&<div className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-left text-sm text-red-900" role="alert"><span className="mt-0.5 font-bold">!</span><div className="flex-1"><p className="font-bold">We couldn’t analyze that thread</p><p className="mt-1 text-red-700">{error}</p><div className="mt-3 flex gap-3"><button onClick={()=>submit()} className="inline-flex items-center gap-1 font-bold"><RotateCcw className="h-3.5 w-3.5"/>Retry</button><button onClick={demo} className="font-bold">Try working demo</button></div></div></div>} {!compact&&<div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-slate-600 lg:justify-start"><button onClick={demo} className="inline-flex items-center gap-2 font-semibold hover:text-ink"><Sparkles className="h-4 w-4 text-brand"/>See a complete demo</button><span>Your first guide is free. No credit card required.</span></div>}</div>}

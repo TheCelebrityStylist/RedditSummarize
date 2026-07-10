@@ -2,9 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light; }
+:root { color-scheme: light; --background:#f6f5f2; --surface:#fff; --ink:#0b1220; --brand:#f04400; --border:#dfe3e8; --radius:1rem; --shadow:0 24px 80px rgba(15,23,42,.12); }
 html { scroll-behavior: smooth; }
-body { background: #f8fafc; color: #0f172a; }
+body { background: var(--background); color: var(--ink); }
+button, a { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid #fb923c; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior:auto!important; animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
 ::selection { background: #fed7aa; }
 .prose-guide h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: .5rem; }
 .prose-guide p { color: #475569; line-height: 1.7; }

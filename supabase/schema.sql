@@ -51,10 +51,21 @@ create table if not exists public.saved_guides (
   primary key (user_id, guide_id)
 );
 
+create table if not exists public.webhook_events (
+  event_id text primary key,
+  event_type text not null,
+  processed_at timestamptz default now()
+);
+
 alter table public.guides enable row level security;
 alter table public.generations enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.saved_guides enable row level security;
+alter table public.webhook_events enable row level security;
+
+create index if not exists generations_user_created_idx on public.generations(user_id, created_at desc);
+create index if not exists generations_guest_created_idx on public.generations(guest_id, created_at desc);
+create index if not exists guides_user_created_idx on public.guides(user_id, created_at desc);
 
 create policy "Users can read own guides" on public.guides for select using (auth.uid() = user_id or visibility = 'public');
 create policy "Users can update own guides" on public.guides for update using (auth.uid() = user_id);

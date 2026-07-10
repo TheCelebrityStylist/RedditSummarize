@@ -1,109 +1,18 @@
 import type { CleanThread, RedditComment } from './types'
 import { mockThread } from './demo'
-import { redditJsonUrl } from './validation'
+import { normalizeRedditUrl, redditJsonUrl } from './validation'
 
+export type RedditErrorCode = 'not_found'|'private'|'age_restricted'|'rate_limited'|'timeout'|'unavailable'|'no_comments'|'auth'
+export class RedditIngestionError extends Error { constructor(public code: RedditErrorCode, message: string, public retryable = false) { super(message); this.name = 'RedditIngestionError' } }
 const BOT_PATTERNS = [/\b(i am a bot|automoderator|beep boop|this action was performed automatically)\b/i]
-
-function cleanText(value?: string | null) {
-  return (value || '')
-    .replace(/&amp;/g, '&')
-    .replace(/\r/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function isUsefulComment(body: string) {
-  const text = cleanText(body)
-  if (!text || text === '[deleted]' || text === '[removed]') return false
-  if (text.length < 25) return false
-  return !BOT_PATTERNS.some((pattern) => pattern.test(text))
-}
-
-function flattenComments(children: any[], depth = 0, acc: RedditComment[] = []) {
-  for (const child of children || []) {
-    if (child?.kind !== 't1') continue
-    const data = child.data
-    const body = cleanText(data?.body)
-    if (isUsefulComment(body)) {
-      acc.push({
-        id: data.id,
-        body,
-        score: Number(data.score || 0),
-        depth,
-        createdUtc: data.created_utc,
-        permalink: data.permalink ? `https://www.reddit.com${data.permalink}` : undefined
-      })
-    }
-    const replies = data?.replies?.data?.children
-    if (Array.isArray(replies)) flattenComments(replies, depth + 1, acc)
-  }
-  return acc
-}
-
-function tokenize(value: string) {
-  return new Set(value.toLowerCase().match(/[a-z0-9]{4,}/g) || [])
-}
-
-function rankComments(title: string, body: string, comments: RedditComment[]) {
-  const queryTokens = tokenize(`${title} ${body}`)
-  return comments
-    .map((comment) => {
-      const tokens = tokenize(comment.body)
-      let overlap = 0
-      for (const token of tokens) if (queryTokens.has(token)) overlap++
-      const lengthScore = Math.min(comment.body.length / 900, 1)
-      const scoreScore = Math.log10(Math.max(comment.score, 0) + 1)
-      const depthScore = comment.depth === 0 ? 0.45 : comment.depth === 1 ? 0.25 : 0
-      const relevanceScore = scoreScore * 1.6 + lengthScore * 1.1 + overlap * 0.08 + depthScore
-      return { ...comment, relevanceScore }
-    })
-    .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
-}
-
-export async function fetchRedditThread(url: string): Promise<CleanThread> {
-  if (!process.env.REDDIT_CLIENT_ID && process.env.NODE_ENV !== 'production') return mockThread
-
-  const response = await fetch(redditJsonUrl(url), {
-    headers: { 'User-Agent': process.env.REDDIT_USER_AGENT || 'ThreadGuide/0.1' },
-    next: { revalidate: 60 }
-  })
-
-  if (!response.ok) throw new Error('Reddit thread is unavailable, private, or rate-limited.')
-  const json = await response.json()
-  const postData = json?.[0]?.data?.children?.[0]?.data
-  const commentChildren = json?.[1]?.data?.children
-  if (!postData) throw new Error('Could not parse Reddit thread.')
-
-  const post = {
-    title: cleanText(postData.title),
-    body: cleanText(postData.selftext),
-    subreddit: postData.subreddit,
-    author: postData.author,
-    score: postData.score,
-    commentCount: postData.num_comments,
-    createdUtc: postData.created_utc,
-    permalink: `https://www.reddit.com${postData.permalink}`,
-    url
-  }
-
-  const allComments = flattenComments(commentChildren)
-  const ranked = rankComments(post.title, post.body, allComments)
-  const maxComments = Number(process.env.MAX_COMMENTS_FOR_LLM || 180)
-  const comments = ranked.slice(0, maxComments)
-
-  return { post, comments, analyzedCount: comments.length, truncated: ranked.length > comments.length }
-}
-
-export function compactThreadForLlm(thread: CleanThread) {
-  return {
-    post: thread.post,
-    comments: thread.comments.map((comment, index) => ({
-      rank: index + 1,
-      body: comment.body.slice(0, 1400),
-      score: comment.score,
-      depth: comment.depth
-    })),
-    analyzedCount: thread.analyzedCount,
-    truncated: thread.truncated
-  }
-}
+function cleanText(value?: string | null) { return (value || '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim() }
+export function isUsefulComment(body: string) { const text = cleanText(body); return !!text && !['[deleted]','[removed]'].includes(text) && text.length >= 25 && !BOT_PATTERNS.some((p) => p.test(text)) }
+type Child = { kind?: string; data?: { id?: string; body?: string; score?: number; created_utc?: number; permalink?: string; over_18?: boolean; subreddit_type?: string; replies?: { data?: { children?: Child[] } } } }
+function flattenComments(children: Child[], depth=0, acc: RedditComment[]=[]): RedditComment[] { for (const child of children || []) { if (child.kind !== 't1') continue; const d=child.data||{}; const body=cleanText(d.body); if (isUsefulComment(body)) acc.push({ id:d.id||crypto.randomUUID(), body, score:Number(d.score||0), depth, createdUtc:d.created_utc, permalink:d.permalink?`https://www.reddit.com${d.permalink}`:undefined }); const replies=d.replies?.data?.children; if (replies) flattenComments(replies,depth+1,acc) } return acc }
+function tokenize(v:string){return new Set(v.toLowerCase().match(/[a-z0-9]{4,}/g)||[])}
+export function rankComments(title:string,body:string,comments:RedditComment[]){const q=tokenize(`${title} ${body}`);return comments.map(c=>{const t=tokenize(c.body);let overlap=0;for(const x of t)if(q.has(x))overlap++;const actionable=/\b(should|recommend|avoid|first|then|because|try|check|buy|book)\b/i.test(c.body)?0.6:0;return{...c,relevanceScore:Math.log10(Math.max(c.score,0)+1)*1.6+Math.min(c.body.length/900,1)*1.1+overlap*.08+(c.depth===0?.45:c.depth===1?.25:0)+actionable}}).sort((a,b)=>(b.relevanceScore||0)-(a.relevanceScore||0))}
+let tokenCache:{token:string;expires:number}|null=null
+async function oauthToken(){if(tokenCache&&tokenCache.expires>Date.now())return tokenCache.token;const id=process.env.REDDIT_CLIENT_ID,secret=process.env.REDDIT_CLIENT_SECRET;if(!id||!secret)return null;const response=await fetch('https://www.reddit.com/api/v1/access_token',{method:'POST',headers:{Authorization:`Basic ${Buffer.from(`${id}:${secret}`).toString('base64')}`,'Content-Type':'application/x-www-form-urlencoded','User-Agent':process.env.REDDIT_USER_AGENT||'ThreadGuide/1.0'},body:'grant_type=client_credentials'});if(!response.ok)throw new RedditIngestionError('auth','Reddit authentication is temporarily unavailable.',true);const data=await response.json() as {access_token?:string;expires_in?:number};if(!data.access_token)throw new RedditIngestionError('auth','Reddit authentication is unavailable.',true);tokenCache={token:data.access_token,expires:Date.now()+(data.expires_in||3600)*900};return tokenCache.token}
+async function fetchWithRetry(url:string,headers:HeadersInit){for(let attempt=0;attempt<3;attempt++){const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000);try{const r=await fetch(url,{headers,signal:controller.signal,redirect:'follow',cache:'no-store'});if(r.status===429){if(attempt<2){await new Promise(x=>setTimeout(x,400*2**attempt));continue}throw new RedditIngestionError('rate_limited','Reddit is limiting requests right now. Please retry shortly.',true)}if(r.status===403)throw new RedditIngestionError('private','This thread is private, restricted, or age-gated.');if(r.status===404)throw new RedditIngestionError('not_found','This Reddit thread could not be found.');if(r.status>=500){if(attempt<2){await new Promise(x=>setTimeout(x,400*2**attempt));continue}throw new RedditIngestionError('unavailable','Reddit is temporarily unavailable.',true)}if(!r.ok)throw new RedditIngestionError('unavailable','Reddit could not return this thread.',true);const type=r.headers.get('content-type')||'';if(!type.includes('json'))throw new RedditIngestionError('unavailable','Reddit returned an unexpected response.',true);return r.json()}catch(e){if(e instanceof RedditIngestionError)throw e;if(e instanceof Error&&e.name==='AbortError')throw new RedditIngestionError('timeout','Reddit took too long to respond.',true);throw new RedditIngestionError('unavailable','Could not connect to Reddit.',true)}finally{clearTimeout(timeout)}}throw new RedditIngestionError('unavailable','Reddit is temporarily unavailable.',true)}
+export async function fetchRedditThread(input:string):Promise<CleanThread>{if(input.includes('/comments/demo/'))return mockThread;const canonical=normalizeRedditUrl(input);const token=await oauthToken().catch(()=>null);const path=new URL(canonical).pathname;let json:unknown;const ua=process.env.REDDIT_USER_AGENT||'ThreadGuide/1.0 (Reddit research summarizer)';if(token)try{json=await fetchWithRetry(`https://oauth.reddit.com${path}?limit=500&sort=confidence&raw_json=1`,{Authorization:`Bearer ${token}`,'User-Agent':ua})}catch(e){if(e instanceof RedditIngestionError&&!e.retryable)throw e}if(!json)json=await fetchWithRetry(redditJsonUrl(canonical),{'User-Agent':ua,Accept:'application/json'});const listings=json as Array<{data?:{children?:Child[]}}> ;const postData=listings?.[0]?.data?.children?.[0]?.data;const commentChildren=listings?.[1]?.data?.children||[];if(!postData)throw new RedditIngestionError('not_found','The thread no longer exists or cannot be read.');const comments=rankComments('', '', flattenComments(commentChildren)).slice(0,Number(process.env.MAX_COMMENTS_FOR_LLM||180));if(!comments.length)throw new RedditIngestionError('no_comments','No useful public comments were found in this thread.');const post={title:cleanText((postData as Record<string,unknown>).title as string),body:cleanText((postData as Record<string,unknown>).selftext as string),subreddit:String((postData as Record<string,unknown>).subreddit||''),author:String((postData as Record<string,unknown>).author||''),score:Number((postData as Record<string,unknown>).score||0),commentCount:Number((postData as Record<string,unknown>).num_comments||0),createdUtc:Number((postData as Record<string,unknown>).created_utc||0),permalink:`https://www.reddit.com${String((postData as Record<string,unknown>).permalink||path)}`,url:canonical};return{post,comments,analyzedCount:comments.length,truncated:(post.commentCount||0)>comments.length}}
+export function compactThreadForLlm(thread:CleanThread){return{post:thread.post,comments:thread.comments.map((c,i)=>({rank:i+1,body:c.body.slice(0,1400),score:c.score,depth:c.depth,permalink:c.permalink})),analyzedCount:thread.analyzedCount,truncated:thread.truncated}}
