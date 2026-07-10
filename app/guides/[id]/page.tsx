@@ -1,21 +1,2 @@
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { GuideRenderer } from '@/components/GuideRenderer'
-import { SaveGuideButton } from '@/components/SaveGuideButton'
-import { mockGuide } from '@/lib/demo'
-import { createSupabaseAdminClient } from '@/lib/supabase'
-import type { GuideJson } from '@/lib/types'
-
-export default async function GuidePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  let guide: GuideJson | null = null
-  const admin = createSupabaseAdminClient()
-  if (id === 'demo') guide = mockGuide
-  if (admin && !guide) {
-    const { data } = await admin.from('guides').select('generated_guide').eq('id', id).maybeSingle()
-    guide = data?.generated_guide as GuideJson | null
-  }
-  if (!guide && id.startsWith('local_')) guide = mockGuide
-  if (!guide) notFound()
-  return <main className="mx-auto max-w-4xl px-5 py-8"><header className="mb-6 flex items-center justify-between"><Link href="/dashboard" className="text-sm font-semibold text-muted">← New guide</Link><SaveGuideButton guideId={id} /></header><GuideRenderer guide={guide} /></main>
-}
+import Link from'next/link';import{notFound}from'next/navigation';import{GuideRenderer}from'@/components/GuideRenderer';import{SaveGuideButton}from'@/components/SaveGuideButton';import{FollowUpPanel}from'@/components/FollowUpPanel';import{mockGuide}from'@/lib/demo';import{createSupabaseAdminClient}from'@/lib/supabase';import type{GuideJson}from'@/lib/types'
+export default async function GuidePage({params}:{params:Promise<{id:string}>}){const{id}=await params;let guide:GuideJson|null=null;const admin=createSupabaseAdminClient();if(id==='demo')guide=mockGuide;if(admin&&!guide){const{data}=await admin.from('guides').select('generated_guide').eq('id',id).maybeSingle();guide=data?.generated_guide as GuideJson|null}if(!guide&&id.startsWith('local_'))guide=mockGuide;if(!guide)notFound();return <main className="mx-auto max-w-5xl px-5 py-8"><header className="mb-6 flex items-center justify-between"><Link href="/dashboard" className="text-sm font-semibold text-muted">← New guide</Link><SaveGuideButton guideId={id}/></header><div className="grid gap-5"><GuideRenderer guide={guide}/><FollowUpPanel guideId={id}/></div></main>}

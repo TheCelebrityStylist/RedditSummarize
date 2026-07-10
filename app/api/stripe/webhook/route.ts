@@ -21,10 +21,16 @@ export async function POST(request: NextRequest) {
       const userId = session.metadata?.user_id
       if (userId) await admin.from('subscriptions').upsert({ user_id: userId, stripe_customer_id: session.customer, stripe_subscription_id: session.subscription, status: 'pro' })
     }
-    if (event.type === 'customer.subscription.deleted' || event.type === 'customer.subscription.updated') {
+    if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.deleted' || event.type === 'customer.subscription.updated') {
       const subscription = event.data.object as Stripe.Subscription
       const status = subscription.status === 'active' || subscription.status === 'trialing' ? 'pro' : subscription.status
-      await admin.from('subscriptions').update({ status, current_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null }).eq('stripe_subscription_id', subscription.id)
+      const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id
+      await admin.from('subscriptions').update({ status, stripe_subscription_id: subscription.id, stripe_customer_id: customerId, price_id: subscription.items.data[0]?.price.id, current_period_start: subscription.current_period_start ? new Date(subscription.current_period_start * 1000).toISOString() : null, current_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null, cancel_at_period_end: subscription.cancel_at_period_end }).eq('stripe_customer_id', customerId)
+    }
+    if (event.type === 'invoice.payment_succeeded' || event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object as Stripe.Invoice
+      const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id
+      if (customerId) await admin.from('subscriptions').update({ last_payment_status: event.type === 'invoice.payment_succeeded' ? 'paid' : 'failed' }).eq('stripe_customer_id', customerId)
     }
     await admin.from('webhook_events').insert({ event_id: event.id, event_type: event.type })
     return NextResponse.json({ received: true })

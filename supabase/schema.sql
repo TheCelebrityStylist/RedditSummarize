@@ -40,6 +40,10 @@ create table if not exists public.subscriptions (
   stripe_subscription_id text unique,
   status text default 'free',
   current_period_end timestamptz,
+  current_period_start timestamptz,
+  price_id text,
+  cancel_at_period_end boolean default false,
+  last_payment_status text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -57,21 +61,46 @@ create table if not exists public.webhook_events (
   processed_at timestamptz default now()
 );
 
+create table if not exists public.guide_action_progress (
+  user_id uuid references auth.users(id) on delete cascade,
+  guide_id uuid references public.guides(id) on delete cascade,
+  step integer not null,
+  completed boolean default false,
+  updated_at timestamptz default now(),
+  primary key (user_id, guide_id, step)
+);
+
+create table if not exists public.follow_up_conversations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  guide_id uuid references public.guides(id) on delete cascade,
+  question text not null,
+  answer text not null,
+  created_at timestamptz default now()
+);
+
 alter table public.guides enable row level security;
 alter table public.generations enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.saved_guides enable row level security;
 alter table public.webhook_events enable row level security;
+alter table public.guide_action_progress enable row level security;
+alter table public.follow_up_conversations enable row level security;
 
 create index if not exists generations_user_created_idx on public.generations(user_id, created_at desc);
 create index if not exists generations_guest_created_idx on public.generations(guest_id, created_at desc);
 create index if not exists guides_user_created_idx on public.guides(user_id, created_at desc);
+create index if not exists subscriptions_customer_idx on public.subscriptions(stripe_customer_id);
+create index if not exists subscriptions_status_idx on public.subscriptions(status);
+create index if not exists follow_up_user_created_idx on public.follow_up_conversations(user_id, created_at desc);
 
 create policy "Users can read own guides" on public.guides for select using (auth.uid() = user_id or visibility = 'public');
 create policy "Users can update own guides" on public.guides for update using (auth.uid() = user_id);
 create policy "Users can read own generations" on public.generations for select using (auth.uid() = user_id);
 create policy "Users can read own subscription" on public.subscriptions for select using (auth.uid() = user_id);
 create policy "Users can manage own saved guides" on public.saved_guides for all using (auth.uid() = user_id);
+create policy "Users can manage own action progress" on public.guide_action_progress for all using (auth.uid() = user_id);
+create policy "Users can read own follow ups" on public.follow_up_conversations for select using (auth.uid() = user_id);
 
 create or replace function public.set_updated_at()
 returns trigger as $$

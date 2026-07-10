@@ -5,6 +5,7 @@ import { generateGuideJson } from '@/lib/summarizer'
 import { redditUrlSchema, normalizeRedditUrl } from '@/lib/validation'
 import { assertCanGenerate, getCurrentUser, recordGeneration } from '@/lib/usage'
 import { createSupabaseAdminClient } from '@/lib/supabase'
+import { getCachedThread, setCachedThread } from '@/lib/cache'
 
 const bodySchema = z.object({ redditUrl: redditUrlSchema })
 
@@ -17,7 +18,8 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser()
     await assertCanGenerate(user?.id, guestId)
 
-    const thread = await fetchRedditThread(redditUrl)
+    const thread = getCachedThread(redditUrl) || await fetchRedditThread(redditUrl)
+    setCachedThread(redditUrl, thread)
     const guide = await generateGuideJson(thread)
     const admin = createSupabaseAdminClient()
     let id = `local_${Date.now()}`
